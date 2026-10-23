@@ -25,6 +25,27 @@ const ROLE_STAFF = ['admin', 'lecturer'];
 const WEEKDAY_ORDER = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
 const BUILDINGS = ['Khu A', 'Khu B', 'A1', 'Khu C'];
 
+async function createNotifications(userIds, type, title, message) {
+  const uniqueIds = [...new Set(userIds.map(Number).filter(Number.isInteger))];
+  for (const userId of uniqueIds) {
+    await run(
+      'INSERT INTO notifications (userId, type, title, message) VALUES (?, ?, ?, ?)',
+      [userId, type, title, message]
+    );
+  }
+}
+
+async function notifyImportantNews(newsItem) {
+  if (newsItem.status !== 'published' || !Number(newsItem.isImportant)) return;
+  const users = await all("SELECT id FROM users WHERE role IN ('student', 'lecturer')");
+  await createNotifications(
+    users.map((user) => user.id),
+    'important_news',
+    'Có tin quan trọng mới',
+    newsItem.title
+  );
+}
+
 
 function timeToMinutes(time) {
   const [hours, minutes] = String(time || '00:00').split(':').map(Number);
@@ -524,6 +545,62 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   }
 });
 
+app.put('/api/auth/change-password', authMiddleware, async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body || {};
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ message: 'Vui lòng nhập mật khẩu cũ, mật khẩu mới và xác nhận mật khẩu.' });
+    }
+    if (String(newPassword).length < 6 || String(newPassword).length > 30) {
+      return res.status(400).json({ message: 'Mật khẩu mới phải dài từ 6 đến 30 ký tự.' });
+    }
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: 'Mật khẩu xác nhận không khớp.' });
+    }
+    const user = await get('SELECT password FROM users WHERE id = ?', [req.user.id]);
+    if (!user) return res.status(404).json({ message: 'Không tìm thấy tài khoản.' });
+    if (!(await bcrypt.compare(String(currentPassword), user.password))) {
+      return res.status(400).json({ message: 'Mật khẩu cũ không chính xác.' });
+    }
+    if (await bcrypt.compare(String(newPassword), user.password)) {
+      return res.status(400).json({ message: 'Mật khẩu mới phải khác mật khẩu cũ.' });
+    }
+    const hashedPassword = await bcrypt.hash(String(newPassword), 12);
+    await run('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, req.user.id]);
+    return res.json({ message: 'Đổi mật khẩu thành công.' });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Lỗi server khi đổi mật khẩu.' });
+  }
+});
+
+app.get('/api/notifications', authMiddleware, async (req, res) => {
+  try {
+    const notifications = await all(
+      'SELECT id, type, title, message, isRead, createdAt FROM notifications WHERE userId = ? ORDER BY createdAt DESC, id DESC LIMIT 100',
+      [req.user.id]
+    );
+    return res.json(notifications);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Lỗi server khi lấy thông báo.' });
+  }
+});
+
+app.put('/api/notifications/:id/read', authMiddleware, async (req, res) => {
+  try {
+    const result = await run(
+      'UPDATE notifications SET isRead = 1 WHERE id = ? AND userId = ?',
+      [req.params.id, req.user.id]
+    );
+    if (!result.changes) return res.status(404).json({ message: 'Không tìm thấy thông báo.' });
+    return res.json({ message: 'Đã đánh dấu đã đọc.' });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Lỗi server khi cập nhật thông báo.' });
+  }
+});
+
 
 app.get('/api/news', authMiddleware, async (req, res) => {
   try {
@@ -602,6 +679,12 @@ app.post('/api/news', authMiddleware, requireRoles('admin'), async (req, res) =>
       [result.id]
     );
 
+    try {
+      await notifyImportantNews(newsItem);
+    } catch (notificationError) {
+      console.error('Không thể tạo thông báo tin quan trọng:', notificationError);
+    }
+
     return res.status(201).json({ message: 'Đăng tin tức thành công.', news: newsItem });
   } catch (error) {
     console.error(error);
@@ -645,6 +728,15 @@ app.put('/api/news/:id', authMiddleware, requireRoles('admin'), async (req, res)
        WHERE n.id = ?`,
       [id]
     );
+
+    if (newsItem.status === 'published' && Number(newsItem.isImportant) &&
+        (current.status !== 'published' || !Number(current.isImportant))) {
+      try {
+        await notifyImportantNews(newsItem);
+      } catch (notificationError) {
+        console.error('Không thể tạo thông báo tin quan trọng:', notificationError);
+      }
+    }
 
     return res.json({ message: 'Cập nhật tin tức thành công.', news: newsItem });
   } catch (error) {
@@ -1256,6 +1348,22 @@ app.post('/api/grades', authMiddleware, requireRoles(...ROLE_STAFF), async (req,
 
     const created = await get('SELECT * FROM grades WHERE id = ?', [result.id]);
     await run('INSERT INTO grade_audit (gradeId, actorUserId, action, beforeData, afterData) VALUES (?, ?, \'created\', ?, ?)', [result.id, req.user.id, '{}', JSON.stringify(created)]);
+    try {
+      const [student, course] = await Promise.all([
+        get('SELECT userId FROM students WHERE id = ?', [studentId]),
+        get('SELECT courseName FROM courses WHERE id = ?', [courseId])
+      ]);
+      if (student?.userId) {
+        await createNotifications(
+          [student.userId],
+          'new_grade',
+          'Bạn có điểm mới',
+          `${course?.courseName || 'Môn học'} · ${normalizedSemester}`
+        );
+      }
+    } catch (notificationError) {
+      console.error('Không thể tạo thông báo điểm mới:', notificationError);
+    }
     return res.status(201).json({ message: 'Nhập điểm thành công.', grade: created });
   } catch (error) {
     console.error(error);
@@ -1808,6 +1916,7 @@ app.put('/api/sections/:id', authMiddleware, requireRoles(...ROLE_STAFF), async 
         message: 'Không tìm thấy lớp học phần.'
       });
     }
+    const nextStatus = status || current.status;
 
     // Giảng viên chỉ được sửa lớp do mình tạo
     if (
@@ -2103,7 +2212,7 @@ app.put('/api/sections/:id', authMiddleware, requireRoles(...ROLE_STAFF), async 
         endTime,
         semester.trim(),
         Number(maxStudents),
-        status || 'open',
+        nextStatus,
         startDate,
         endDate,
         id
@@ -2112,6 +2221,27 @@ app.put('/api/sections/:id', authMiddleware, requireRoles(...ROLE_STAFF), async 
 
     // Lấy lại dữ liệu sau khi cập nhật
     const section = await getCurrentSectionWithCount(id);
+
+    if (current.status !== 'closed' && nextStatus === 'closed') {
+      try {
+        const recipients = await all(
+          `SELECT DISTINCT s.userId
+           FROM enrollments e
+           JOIN students s ON s.id = e.studentId
+           WHERE e.sectionId = ? AND s.userId IS NOT NULL`,
+          [id]
+        );
+        const course = await get('SELECT courseName FROM courses WHERE id = ?', [current.courseId]);
+        await createNotifications(
+          recipients.map((recipient) => recipient.userId),
+          'section_closed',
+          'Lớp học phần đã đóng',
+          `${section?.sectionCode || current.sectionCode} · ${course?.courseName || 'Môn học'}`
+        );
+      } catch (notificationError) {
+        console.error('Không thể tạo thông báo lớp đã đóng:', notificationError);
+      }
+    }
 
     return res.json({
       message: 'Cập nhật lớp học phần thành công.',

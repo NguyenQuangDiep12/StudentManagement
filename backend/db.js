@@ -63,6 +63,19 @@ async function createTables() {
   await run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_lecturerCode_unique ON users(lecturerCode)');
 
   await run(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      isRead INTEGER NOT NULL DEFAULT 0,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(userId) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  await run(`
     CREATE TABLE IF NOT EXISTS students (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       studentCode TEXT NOT NULL UNIQUE,
