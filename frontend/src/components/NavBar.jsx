@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../api';
@@ -19,6 +19,7 @@ export default function NavBar() {
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordError, setPasswordError] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
+  const passwordDialogRef = useRef(null);
 
   async function loadNotifications() {
     try {
@@ -34,6 +35,13 @@ export default function NavBar() {
     const timer = window.setInterval(loadNotifications, 30000);
     return () => window.clearInterval(timer);
   }, [token]);
+
+  useEffect(() => {
+    const dialog = passwordDialogRef.current;
+    if (!dialog) return;
+    if (showPasswordForm && !dialog.open) dialog.showModal();
+    if (!showPasswordForm && dialog.open) dialog.close();
+  }, [showPasswordForm]);
 
   async function markAsRead(notification) {
     if (Number(notification.isRead)) return;
@@ -125,8 +133,14 @@ export default function NavBar() {
         </button>
       </div>
       {showPasswordForm && createPortal(
-        <div className="password-dialog-backdrop" role="presentation" onClick={() => setShowPasswordForm(false)}>
-          <section className="password-dialog card" role="dialog" aria-modal="true" aria-labelledby="change-password-title" onClick={(event) => event.stopPropagation()}>
+        <dialog
+          ref={passwordDialogRef}
+          className="password-dialog card"
+          aria-labelledby="change-password-title"
+          onCancel={(event) => { event.preventDefault(); setShowPasswordForm(false); }}
+          onClose={() => setShowPasswordForm(false)}
+          onClick={(event) => { if (event.target === event.currentTarget) setShowPasswordForm(false); }}
+        >
             <h2 id="change-password-title">Đổi mật khẩu</h2>
             {passwordError && <div className="alert error">{passwordError}</div>}
             {passwordMessage && <div className="alert success">{passwordMessage}</div>}
@@ -139,8 +153,7 @@ export default function NavBar() {
                 <button type="submit" className="btn btn-primary">Lưu mật khẩu</button>
               </div>
             </form>
-          </section>
-        </div>,
+        </dialog>,
         document.body
       )}
     </header>
