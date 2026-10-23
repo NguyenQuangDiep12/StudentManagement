@@ -1546,9 +1546,19 @@ export default function DashboardPage() {
   }
 
   function renderWeeklyScheduleSection() {
+    const registeredSectionSchedules = sectionsList.filter((section) => Number(section.isRegistered) === 1);
+    const lecturerSchedules = schedules.filter((schedule) => Number(schedule.createdBy) === Number(user?.id));
+    const standaloneLecturerSchedules = lecturerSchedules.filter((schedule) => !lecturerTeachingSections.some((section) =>
+      Number(section.courseId) === Number(schedule.courseId) &&
+      section.dayOfWeek === schedule.dayOfWeek &&
+      section.startTime === schedule.startTime &&
+      section.endTime === schedule.endTime &&
+      section.semester === schedule.semester &&
+      String(section.room || '').trim().toLowerCase() === String(schedule.room || '').trim().toLowerCase()
+    ));
     const weeklySchedules = isStudent
-      ? sectionsList.filter((section) => Number(section.isRegistered) === 1)
-      : lecturerTeachingSections;
+      ? registeredSectionSchedules
+      : [...lecturerTeachingSections, ...standaloneLecturerSchedules];
 
     return (
       <section className="dashboard-grid">
