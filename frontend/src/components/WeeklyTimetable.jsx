@@ -21,49 +21,40 @@ function timeToMinutes(time) {
   return (hours || 0) * 60 + (minutes || 0);
 }
 
-function findStartIndex(startTime) {
-  const startMinutes = timeToMinutes(startTime);
-  const exactIndex = PERIODS.findIndex((period) => timeToMinutes(period.start) === startMinutes);
-  if (exactIndex !== -1) return exactIndex;
-
-  for (let index = 0; index < PERIODS.length; index += 1) {
-    const current = PERIODS[index];
-    const next = PERIODS[index + 1];
-    const currentStart = timeToMinutes(current.start);
-    const nextStart = next ? timeToMinutes(next.start) : Infinity;
-
-    if (startMinutes >= currentStart && startMinutes < nextStart) {
-      return index;
+function buildTimeSlots(schedules) {
+  const timePoints = new Set(PERIODS.map((period) => period.start));
+  schedules.forEach((schedule) => {
+    if (WEEK_DAYS.includes(schedule.dayOfWeek)) {
+      timePoints.add(schedule.startTime);
+      timePoints.add(schedule.endTime);
     }
-  }
+  });
 
-  return 0;
+  const sortedTimes = [...timePoints]
+    .filter((time) => /^([01]\d|2[0-3]):[0-5]\d$/.test(time))
+    .sort((a, b) => timeToMinutes(a) - timeToMinutes(b));
+
+  return sortedTimes.slice(0, -1).map((start, index) => ({
+    start,
+    end: sortedTimes[index + 1]
+  }));
 }
 
-function findEndIndex(endTime) {
-  const endMinutes = timeToMinutes(endTime);
-  const firstAfter = PERIODS.findIndex((period) => timeToMinutes(period.start) >= endMinutes);
-
-  if (firstAfter !== -1) {
-    return firstAfter;
-  }
-
-  return PERIODS.length;
-}
-
-function normalizeSchedules(schedules) {
+function normalizeSchedules(schedules, timeSlots) {
+  const timeIndexes = new Map(timeSlots.map((slot, index) => [slot.start, index]));
   return schedules
     .filter((schedule) => WEEK_DAYS.includes(schedule.dayOfWeek))
     .map((schedule) => {
-      const startIndex = findStartIndex(schedule.startTime);
-      const endIndex = Math.max(startIndex + 1, findEndIndex(schedule.endTime));
+      const startIndex = timeIndexes.get(schedule.startTime);
+      const endIndex = timeIndexes.get(schedule.endTime);
 
       return {
         ...schedule,
         startIndex,
         rowSpan: Math.max(1, endIndex - startIndex)
       };
-    });
+    })
+    .filter((schedule) => Number.isInteger(schedule.startIndex));
 }
 
 export default function WeeklyTimetable({
@@ -72,7 +63,8 @@ export default function WeeklyTimetable({
   description = 'Bảng tuần hiển thị tự động từ các lớp học phần bạn đã đăng ký.',
   emptyMessage = 'Bạn chưa có môn học nào trong thời khóa biểu tuần.'
 }) {
-  const normalizedSchedules = normalizeSchedules(schedules);
+  const timeSlots = buildTimeSlots(schedules);
+  const normalizedSchedules = normalizeSchedules(schedules, timeSlots);
   const scheduleMap = new Map();
   const blockedCells = new Set();
 
@@ -106,11 +98,11 @@ export default function WeeklyTimetable({
               </tr>
             </thead>
             <tbody>
-              {PERIODS.map((period, periodIndex) => (
-                <tr key={period.label}>
+              {timeSlots.map((slot, periodIndex) => (
+                <tr key={slot.start}>
                   <th className="period-cell">
-                    <span>{period.label}</span>
-                    <small>{period.start}</small>
+                    <span>{PERIODS.find((period) => period.start === slot.start)?.label || ''}</span>
+                    <small>{slot.start}</small>
                   </th>
 
                   {WEEK_DAYS.map((day) => {
