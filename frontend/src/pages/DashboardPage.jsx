@@ -205,7 +205,6 @@ export default function DashboardPage() {
   const [newsSearch, setNewsSearch] = useState({ query: '', field: 'all' });
   const [newsCategoryFilter, setNewsCategoryFilter] = useState('all');
   const [newsStatusFilter, setNewsStatusFilter] = useState('all');
-  const [newsImportantOnly, setNewsImportantOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState('overview');
   const [feedbackForm, setFeedbackForm] = useState({ subject: '', message: '' });
@@ -370,23 +369,26 @@ export default function DashboardPage() {
     return newsList.filter((news) => {
       if (newsCategoryFilter !== 'all' && (news.category || 'Thông báo') !== newsCategoryFilter) return false;
       if (newsStatusFilter !== 'all' && news.status !== newsStatusFilter) return false;
-      if (newsImportantOnly && Number(news.isImportant) !== 1) return false;
       if (keywords.length === 0) return true;
 
-      const newsValues = [news.title, news.summary, news.content, news.category, news.createdByName, formatDateTime(news.createdAt)];
+      const newsValues = [
+        news.title,
+        news.category || 'Thông báo',
+        news.status === 'published' ? 'Đang hiển thị' : 'Bản nháp',
+        formatDateTime(news.createdAt)
+      ];
       const selectedValues = newsSearch.field === 'all' ? newsValues : [newsValues[Number(newsSearch.field)]];
       const haystack = normalizeText(selectedValues.filter(Boolean).join(' '));
       return keywords.every((word) => haystack.includes(word));
     });
-  }, [newsSearch, newsCategoryFilter, newsStatusFilter, newsImportantOnly, newsList]);
+  }, [newsSearch, newsCategoryFilter, newsStatusFilter, newsList]);
 
-  const hasNewsFilter = Boolean(newsSearch.query.trim()) || newsCategoryFilter !== 'all' || newsStatusFilter !== 'all' || newsImportantOnly;
+  const hasNewsFilter = Boolean(newsSearch.query.trim()) || newsCategoryFilter !== 'all' || newsStatusFilter !== 'all';
 
   function resetNewsFilters() {
     setNewsSearch({ query: '', field: 'all' });
     setNewsCategoryFilter('all');
     setNewsStatusFilter('all');
-    setNewsImportantOnly(false);
   }
 
   const filteredFeedbacks = useMemo(() => {
@@ -2098,7 +2100,7 @@ export default function DashboardPage() {
   function renderNewsToolbar(showStatus) {
     return (
       <>
-        <SearchToolbar value={newsSearch} onChange={setNewsSearch} placeholder="Nhập từ khóa tin tức..." fields={['Tiêu đề', 'Tóm tắt', 'Nội dung', 'Phân loại', 'Người đăng', 'Ngày đăng']} count={filteredNews.length} total={newsList.length} label="tin" />
+        <SearchToolbar value={newsSearch} onChange={setNewsSearch} placeholder="Nhập từ khóa tin tức..." fields={['Tiêu đề', 'Phân loại', 'Trạng thái', 'Ngày đăng']} count={filteredNews.length} total={newsList.length} label="tin" />
         <div className="toolbar news-toolbar">
         <select value={newsCategoryFilter} onChange={(event) => setNewsCategoryFilter(event.target.value)}>
           <option value="all">Tất cả phân loại</option>
@@ -2113,14 +2115,6 @@ export default function DashboardPage() {
             <option value="draft">Bản nháp</option>
           </select>
         )}
-        <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={newsImportantOnly}
-            onChange={(event) => setNewsImportantOnly(event.target.checked)}
-          />
-          <span>Chỉ tin quan trọng</span>
-        </label>
         {hasNewsFilter && (
           <button type="button" className="btn btn-light" onClick={resetNewsFilters}>Xóa bộ lọc</button>
         )}
