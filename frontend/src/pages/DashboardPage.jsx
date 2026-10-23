@@ -306,7 +306,7 @@ export default function DashboardPage() {
 
   const filteredCourses = useMemo(() => {
     return courses.filter((course) => matchesSearch(
-      [course.courseCode, course.courseName, course.lecturerName], courseSearch
+      [course.courseCode, course.courseName], courseSearch
     ));
   }, [courseSearch, courses]);
 
@@ -1350,7 +1350,7 @@ export default function DashboardPage() {
             <p>Tạo môn học trước, sau đó mở lớp học phần để sinh viên đăng ký.</p>
           </div>
 
-          <SearchToolbar value={courseSearch} onChange={setCourseSearch} placeholder="Nhập từ khóa môn học..." fields={['Mã môn', 'Tên môn', 'Giảng viên']} count={filteredCourses.length} total={courses.length} label="môn học" />
+          <SearchToolbar value={courseSearch} onChange={setCourseSearch} placeholder="Nhập từ khóa môn học..." fields={['Mã môn', 'Tên môn']} count={filteredCourses.length} total={courses.length} label="môn học" />
 
           <div className="table-wrapper">
             <table>
