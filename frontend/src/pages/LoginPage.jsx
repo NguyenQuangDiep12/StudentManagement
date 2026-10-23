@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getFakeTestNotification } from '../utils/fakeTestNotifications';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -24,7 +23,7 @@ export default function LoginPage() {
       await login(form.username, form.password);
       navigate('/dashboard');
     } catch (err) {
-      setError(getFakeTestNotification('login', err.message));
+      setError(err.message);
     } finally {
       setSubmitting(false);
     }

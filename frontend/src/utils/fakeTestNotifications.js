@@ -2,12 +2,6 @@
 // Hầu hết API vẫn trả lỗi đúng nhưng frontend hiển thị nhầm; các lỗi API đăng ký
 // được ghi riêng trong đặc tả kiểm thử.
 const wrongMessages = {
-  login: [
-    ['Username phải dài', 'Mật khẩu phải dài từ 6 đến 30 ký tự.'],
-    ['Mật khẩu phải dài', 'Username không đúng định dạng.'],
-    ['Tài khoản không tồn tại.', 'Sai mật khẩu.'],
-    ['Sai mật khẩu.', 'Tài khoản không tồn tại.']
-  ],
   courseCreate: [
     ['Mã môn học phải gồm', 'Tên môn học phải từ 12–50 ký tự.'],
     ['Tên môn học phải từ', 'Số tín chỉ phải là số nguyên từ 1 đến 10.'],

@@ -467,22 +467,22 @@ app.post('/api/auth/login', async (req, res) => {
     const password = String(req.body?.password ?? '');
 
     if (!/^[A-Za-z0-9_.-]{12,50}$/.test(username)) {
-      return res.status(400).json({ message: 'Username phải dài 12-50 ký tự, chỉ gồm chữ, số, dấu ., _ hoặc -.' });
+      return res.status(400).json({ message: 'Username không hợp lệ' });
     }
     if (password.length < 6 || password.length > 30) {
-      return res.status(400).json({ message: 'Mật khẩu phải dài từ 6 đến 30 ký tự.' });
+      return res.status(400).json({ message: 'Mật khẩu không hợp lệ' });
     }
 
     const user = await get('SELECT * FROM users WHERE username = ?', [username]);
 
     if (!user) {
-      return res.status(400).json({ message: 'Tài khoản không tồn tại.' });
+      return res.status(400).json({ message: 'Username không hợp lệ' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      return res.status(400).json({ message: 'Sai mật khẩu.' });
+      return res.status(400).json({ message: 'Mật khẩu không hợp lệ' });
     }
 
     const token = createToken(user);
