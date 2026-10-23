@@ -352,7 +352,11 @@ export default function DashboardPage() {
 
   const filteredSections = useMemo(() => {
     return sectionsList.filter((section) => matchesSearch(
-      [section.sectionCode, section.courseCode, section.courseName, section.semester, section.building, section.room, section.dayOfWeek, section.lecturerName], sectionSearch
+      [
+        section.sectionCode,
+        [section.courseCode, section.courseName].join(' '),
+        section.status === 'open' ? 'Mở đăng ký Đang mở' : 'Đóng đăng ký'
+      ], sectionSearch
     ));
   }, [sectionSearch, sectionsList]);
 
@@ -1761,7 +1765,7 @@ export default function DashboardPage() {
             <p>Theo dõi chỗ còn trống, lịch học và trạng thái đăng ký của từng lớp.</p>
           </div>
 
-          <SearchToolbar value={sectionSearch} onChange={setSectionSearch} placeholder="Nhập từ khóa lớp học phần..." fields={['Mã lớp', 'Mã môn', 'Môn học', 'Học kỳ', 'Tòa nhà', 'Phòng', 'Thứ', 'Giảng viên']} count={filteredSections.length} total={sectionsList.length} label="lớp học phần" />
+          <SearchToolbar value={sectionSearch} onChange={setSectionSearch} placeholder="Nhập từ khóa lớp học phần..." fields={['Mã lớp', 'Môn học', 'Trạng thái']} count={filteredSections.length} total={sectionsList.length} label="lớp học phần" />
 
           <div className="table-wrapper">
             <table>
@@ -1866,7 +1870,7 @@ export default function DashboardPage() {
           <p>Chỉ đăng ký được lớp còn chỗ và không trùng lịch với lớp bạn đã chọn. Lịch được cập nhật sau khi đăng ký.</p>
         </div>
 
-        <SearchToolbar value={sectionSearch} onChange={setSectionSearch} placeholder="Nhập từ khóa lớp học phần..." fields={['Mã lớp', 'Mã môn', 'Môn học', 'Học kỳ', 'Tòa nhà', 'Phòng', 'Thứ', 'Giảng viên']} count={filteredSections.length} total={sectionsList.length} label="lớp học phần" />
+        <SearchToolbar value={sectionSearch} onChange={setSectionSearch} placeholder="Nhập từ khóa lớp học phần..." fields={['Mã lớp', 'Môn học', 'Trạng thái']} count={filteredSections.length} total={sectionsList.length} label="lớp học phần" />
 
         <div className="table-wrapper">
           <table>
