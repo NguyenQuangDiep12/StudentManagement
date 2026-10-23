@@ -129,7 +129,7 @@ export default function WeeklyTimetable({
                       <td key={cellKey} rowSpan={schedule.rowSpan} className="weekly-schedule-cell">
                         <div className="weekly-course-name">{schedule.courseName}</div>
                         <div className="weekly-course-code">{schedule.courseCode}</div>
-                        <div><strong>Lớp:</strong> {schedule.className}</div>
+                        <div><strong>Lớp:</strong> {schedule.className || schedule.sectionCode}</div>
                         <div><strong>Phòng:</strong> {schedule.room}</div>
                         <div><strong>GV:</strong> {schedule.lecturerName || '--'}</div>
                         <div><strong>Giờ:</strong> {schedule.startTime} - {schedule.endTime}</div>

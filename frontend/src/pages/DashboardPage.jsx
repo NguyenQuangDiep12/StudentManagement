@@ -432,11 +432,6 @@ export default function DashboardPage() {
     [sectionsList, user?.id]
   );
 
-  const lecturerWeeklySchedules = useMemo(
-    () => schedules.filter((schedule) => Number(schedule.createdBy) === Number(user?.id)),
-    [schedules, user?.id]
-  );
-
   const summaryCards = useMemo(() => {
     if (isStudent) {
       return [
@@ -1551,7 +1546,9 @@ export default function DashboardPage() {
   }
 
   function renderWeeklyScheduleSection() {
-    const weeklySchedules = isStudent ? schedules : lecturerWeeklySchedules;
+    const weeklySchedules = isStudent
+      ? sectionsList.filter((section) => Number(section.isRegistered) === 1)
+      : lecturerTeachingSections;
 
     return (
       <section className="dashboard-grid">
@@ -1561,12 +1558,12 @@ export default function DashboardPage() {
           description={
             isStudent
               ? 'Bảng tuần hiển thị tự động từ các lớp học phần bạn đã đăng ký.'
-              : 'Bảng tuần hiển thị các lịch học bạn đã tạo trong hệ thống.'
+              : 'Bảng tuần hiển thị lịch của các lớp học phần bạn đã tạo.'
           }
           emptyMessage={
             isStudent
               ? 'Bạn chưa có môn học nào trong thời khóa biểu tuần.'
-              : 'Bạn chưa tạo lịch học nào để hiển thị thời khóa biểu tuần.'
+              : 'Bạn chưa tạo lớp học phần nào để hiển thị thời khóa biểu tuần.'
           }
         />
 
@@ -1576,23 +1573,23 @@ export default function DashboardPage() {
             <p>
               {isStudent
                 ? 'Dữ liệu được lấy trực tiếp từ các lớp học phần bạn đã đăng ký trong hệ thống.'
-                : 'Dữ liệu được lấy trực tiếp từ các lịch học bạn đã tạo trong hệ thống.'}
+                : 'Dữ liệu được lấy trực tiếp từ các lớp học phần bạn đã tạo trong hệ thống.'}
             </p>
           </div>
 
           {isStudent ? (
             <div className="profile-grid">
-              <div><strong>Tổng số buổi học:</strong> {schedules.length}</div>
+              <div><strong>Tổng số buổi học:</strong> {weeklySchedules.length}</div>
               <div><strong>Số lớp học phần đã đăng ký:</strong> {registeredSections.length}</div>
-              <div><strong>Môn học trong tuần:</strong> {new Set(schedules.map((item) => item.courseCode)).size}</div>
-              <div><strong>Giảng viên hiển thị:</strong> {schedules.some((item) => item.lecturerName) ? 'Có' : 'Chưa có dữ liệu'}</div>
+              <div><strong>Môn học trong tuần:</strong> {new Set(weeklySchedules.map((item) => item.courseCode)).size}</div>
+              <div><strong>Giảng viên hiển thị:</strong> {weeklySchedules.some((item) => item.lecturerName) ? 'Có' : 'Chưa có dữ liệu'}</div>
             </div>
           ) : (
             <div className="profile-grid">
-              <div><strong>Tổng số buổi dạy:</strong> {lecturerWeeklySchedules.length}</div>
-              <div><strong>Lịch học đã tạo:</strong> {lecturerWeeklySchedules.length}</div>
-              <div><strong>Môn đang giảng dạy:</strong> {new Set(lecturerWeeklySchedules.map((item) => item.courseCode)).size}</div>
-              <div><strong>Thời khóa biểu tuần:</strong> {lecturerWeeklySchedules.length ? 'Đã cập nhật' : 'Chưa có dữ liệu'}</div>
+              <div><strong>Tổng số lớp học phần:</strong> {weeklySchedules.length}</div>
+              <div><strong>Lớp học phần đang mở:</strong> {weeklySchedules.filter((item) => item.status === 'open').length}</div>
+              <div><strong>Môn đang giảng dạy:</strong> {new Set(weeklySchedules.map((item) => item.courseCode)).size}</div>
+              <div><strong>Thời khóa biểu tuần:</strong> {weeklySchedules.length ? 'Đã cập nhật' : 'Chưa có dữ liệu'}</div>
             </div>
           )}
         </div>
