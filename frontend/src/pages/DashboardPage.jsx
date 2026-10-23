@@ -712,7 +712,7 @@ export default function DashboardPage() {
         setActiveSection('weeklySchedule');
       }
     } catch (err) {
-      setError(getFakeTestNotification(editingSection ? 'sectionUpdate' : 'sectionCreate', err.message));
+      setError(err.message);
     }
   }
 

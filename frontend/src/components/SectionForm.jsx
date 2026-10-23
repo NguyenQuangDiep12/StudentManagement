@@ -57,9 +57,9 @@ export default function SectionForm({ courses, currentSection, onSubmit, onCance
 
   function handleSubmit(event) {
     event.preventDefault();
-    // Lỗi kiểm thử giả lập: dùng >= thay vì > tại giới hạn trên của đặc tả.
-    if (Array.from(form.room.trim()).length >= 30) {
-      setFormError('Phòng học phải ngắn hơn 30 ký tự.');
+    const roomLength = Array.from(form.room.trim()).length;
+    if (roomLength < 4 || roomLength > 30) {
+      setFormError('Phòng học phải từ 4 đến 30 ký tự.');
       return;
     }
     if (Array.from(form.semester.trim()).length >= 20) {
