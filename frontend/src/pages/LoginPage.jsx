@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getFakeTestNotification } from '../utils/fakeTestNotifications';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -23,7 +24,7 @@ export default function LoginPage() {
       await login(form.username, form.password);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.message);
+      setError(getFakeTestNotification('login', err.message));
     } finally {
       setSubmitting(false);
     }
@@ -85,9 +86,6 @@ export default function LoginPage() {
                 placeholder="Nhập username"
                 value={form.username}
                 onChange={handleChange}
-                minLength={12}
-                maxLength={50}
-                pattern="[A-Za-z0-9_.-]{12,50}"
                 required
               />
             </div>
@@ -100,8 +98,6 @@ export default function LoginPage() {
                 name="password"
                 placeholder="Nhập password"
                 value={form.password}
-                minLength={6}
-                maxLength={30}
                 onChange={handleChange}
                 required
               />

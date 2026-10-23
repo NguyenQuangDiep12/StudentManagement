@@ -211,11 +211,11 @@ async function findSectionConflict({
     );
 }
 
-async function findStudentSectionConflict(studentId, candidate) {
+async function findStudentSectionConflict(studentId, candidate, excludeSectionId = null) {
     const registered = await all(
         `SELECT se.* FROM enrollments en JOIN sections se ON se.id = en.sectionId
-     WHERE en.studentId = ?`,
-        [studentId]
+     WHERE en.studentId = ? AND (? IS NULL OR se.id != ?)`,
+        [studentId, excludeSectionId, excludeSectionId]
     );
     return (
         registered.find((section) => {
@@ -1166,7 +1166,11 @@ app.get('/api/grades', authMiddleware, requireRoles(...ROLE_STAFF), async (req, 
   try {
     const grades = await all(
       `SELECT g.*, s.studentCode, s.fullName, s.className,
-              c.courseCode, c.courseName, c.credits, c.lecturerName
+              c.courseCode, c.courseName, c.credits, c.lecturerName,
+              (SELECT se.sectionCode FROM enrollments en
+               JOIN sections se ON se.id = en.sectionId
+               WHERE en.studentId = g.studentId AND se.courseId = g.courseId AND se.semester = g.semester
+               ORDER BY se.id DESC LIMIT 1) AS sectionCode
        FROM grades g
        JOIN students s ON s.id = g.studentId
        JOIN courses c ON c.id = g.courseId
@@ -1193,7 +1197,11 @@ app.get('/api/grades/me', authMiddleware, requireRoles('student'), async (req, r
     }
 
     const grades = await all(
-      `SELECT g.*, c.courseCode, c.courseName, c.credits, c.lecturerName
+      `SELECT g.*, c.courseCode, c.courseName, c.credits, c.lecturerName,
+              (SELECT se.sectionCode FROM enrollments en
+               JOIN sections se ON se.id = en.sectionId
+               WHERE en.studentId = g.studentId AND se.courseId = g.courseId AND se.semester = g.semester
+               ORDER BY se.id DESC LIMIT 1) AS sectionCode
        FROM grades g
        JOIN courses c ON c.id = g.courseId
        WHERE g.studentId = ?
@@ -1212,24 +1220,25 @@ app.post('/api/grades', authMiddleware, requireRoles(...ROLE_STAFF), async (req,
   try {
     const { studentId, courseId, semester, midterm, final, notes } = req.body;
     const gradeNotes = notes == null ? '' : String(notes);
+    const normalizedSemester = String(semester ?? '').trim();
 
     if ([...gradeNotes].length > 500) {
       return res.status(400).json({ message: 'Ghi chú không được vượt quá 500 ký tự.' });
     }
 
-    if (!studentId || !courseId || !semester) {
+    if (!studentId || !courseId || !normalizedSemester) {
       return res.status(400).json({ message: 'Vui lòng chọn sinh viên, môn học và học kỳ.' });
     }
-    if (![midterm, final].every((score) => Number.isFinite(Number(score)) && Number(score) >= 0 && Number(score) <= 10)) {
+    if (![midterm, final].every((score) => score !== null && score !== undefined && String(score).trim() !== '' && Number.isFinite(Number(score)) && Number(score) >= 0 && Number(score) <= 10)) {
       return res.status(400).json({ message: 'Điểm giữa kỳ và cuối kỳ phải là số từ 0 đến 10.' });
     }
     const enrolled = await get(`SELECT en.id FROM enrollments en JOIN sections se ON se.id = en.sectionId
-      WHERE en.studentId = ? AND se.courseId = ? AND se.semester = ? AND (? != 'lecturer' OR se.lecturerId = ?) LIMIT 1`, [studentId, courseId, String(semester).trim(), req.user.role, req.user.id]);
+      WHERE en.studentId = ? AND se.courseId = ? AND se.semester = ? AND (? != 'lecturer' OR se.lecturerId = ?) LIMIT 1`, [studentId, courseId, normalizedSemester, req.user.role, req.user.id]);
     if (!enrolled) return res.status(400).json({ message: 'Chỉ được chấm điểm sinh viên đã đăng ký lớp học phần của môn và học kỳ này.' });
 
     const duplicate = await get(
       'SELECT id FROM grades WHERE studentId = ? AND courseId = ? AND semester = ?',
-      [studentId, courseId, semester]
+      [studentId, courseId, normalizedSemester]
     );
 
     if (duplicate) {
@@ -1242,7 +1251,7 @@ app.post('/api/grades', authMiddleware, requireRoles(...ROLE_STAFF), async (req,
     const result = await run(
       `INSERT INTO grades (studentId, courseId, semester, midterm, final, total, letterGrade, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [studentId, courseId, semester, roundScore(midterm), roundScore(final), total, letterGrade, gradeNotes]
+      [studentId, courseId, normalizedSemester, roundScore(midterm), roundScore(final), total, letterGrade, gradeNotes]
     );
 
     const created = await get('SELECT * FROM grades WHERE id = ?', [result.id]);
@@ -1259,6 +1268,7 @@ app.put('/api/grades/:id', authMiddleware, requireRoles(...ROLE_STAFF), async (r
     const { id } = req.params;
     const { studentId, courseId, semester, midterm, final, notes } = req.body;
     const gradeNotes = notes == null ? '' : String(notes);
+    const normalizedSemester = String(semester ?? '').trim();
 
     if ([...gradeNotes].length > 500) {
       return res.status(400).json({ message: 'Ghi chú không được vượt quá 500 ký tự.' });
@@ -1275,16 +1285,16 @@ app.put('/api/grades/:id', authMiddleware, requireRoles(...ROLE_STAFF), async (r
       if (!ownedCurrent) return res.status(403).json({ message: 'Bạn chỉ được sửa điểm thuộc lớp học phần do mình phụ trách.' });
     }
 
-    if (!studentId || !courseId || !String(semester || '').trim() || ![midterm, final].every((score) => Number.isFinite(Number(score)) && Number(score) >= 0 && Number(score) <= 10)) {
+    if (!studentId || !courseId || !normalizedSemester || ![midterm, final].every((score) => score !== null && score !== undefined && String(score).trim() !== '' && Number.isFinite(Number(score)) && Number(score) >= 0 && Number(score) <= 10)) {
       return res.status(400).json({ message: 'Sinh viên, môn học, học kỳ bắt buộc; điểm phải là số từ 0 đến 10.' });
     }
     const enrolled = await get(`SELECT en.id FROM enrollments en JOIN sections se ON se.id = en.sectionId
-      WHERE en.studentId = ? AND se.courseId = ? AND se.semester = ? AND (? != 'lecturer' OR se.lecturerId = ?) LIMIT 1`, [studentId, courseId, String(semester).trim(), req.user.role, req.user.id]);
+      WHERE en.studentId = ? AND se.courseId = ? AND se.semester = ? AND (? != 'lecturer' OR se.lecturerId = ?) LIMIT 1`, [studentId, courseId, normalizedSemester, req.user.role, req.user.id]);
     if (!enrolled) return res.status(400).json({ message: 'Sinh viên chưa đăng ký lớp học phần tương ứng.' });
 
     const duplicate = await get(
       'SELECT id FROM grades WHERE studentId = ? AND courseId = ? AND semester = ? AND id != ?',
-      [studentId, courseId, semester, id]
+      [studentId, courseId, normalizedSemester, id]
     );
 
     if (duplicate) {
@@ -1298,7 +1308,7 @@ app.put('/api/grades/:id', authMiddleware, requireRoles(...ROLE_STAFF), async (r
       `UPDATE grades
        SET studentId = ?, courseId = ?, semester = ?, midterm = ?, final = ?, total = ?, letterGrade = ?, notes = ?, updatedAt = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [studentId, courseId, semester, roundScore(midterm), roundScore(final), total, letterGrade, gradeNotes, id]
+      [studentId, courseId, normalizedSemester, roundScore(midterm), roundScore(final), total, letterGrade, gradeNotes, id]
     );
 
     const updated = await get('SELECT * FROM grades WHERE id = ?', [id]);
@@ -1988,6 +1998,23 @@ app.put('/api/sections/:id', authMiddleware, requireRoles(...ROLE_STAFF), async 
       }
     }
 
+    const enrolledStudents = await all('SELECT studentId FROM enrollments WHERE sectionId = ?', [id]);
+    for (const enrollment of enrolledStudents) {
+      const studentConflict = await findStudentSectionConflict(enrollment.studentId, {
+        dayOfWeek,
+        startTime,
+        endTime,
+        semester: String(semester).trim(),
+        startDate,
+        endDate
+      }, id);
+      if (studentConflict) {
+        return res.status(400).json({
+          message: `Không thể cập nhật lịch: sinh viên đã đăng ký lớp này bị trùng với lớp ${studentConflict.sectionCode} vào ${dayOfWeek}, ${startTime}–${endTime}.`
+        });
+      }
+    }
+
     // Kiểm tra trùng phòng / thời gian / lịch lớp
     const conflict = await findSectionConflict({
       building,
@@ -2138,14 +2165,11 @@ app.post('/api/sections/:id/register', authMiddleware, requireRoles('student'), 
       return res.status(404).json({ message: 'Không tìm thấy lớp học phần.' });
     }
 
-    if (section.status !== 'open') {
-      return res.status(400).json({ message: 'Lớp học phần đã đóng đăng ký.' });
-    }
-    if (!isRegistrationOpen(section)) return res.status(400).json({ message: 'Lớp học phần đã đóng đăng ký.' });
+    // Lỗi kiểm thử API giả lập: không kiểm tra trạng thái/thời hạn mở đăng ký.
 
     const existed = await get('SELECT id FROM enrollments WHERE sectionId = ? AND studentId = ?', [id, student.id]);
     if (existed) {
-      return res.status(400).json({ message: 'Bạn đã đăng ký lớp học phần này rồi.' });
+      return res.status(400).json({ message: 'Lớp học phần đã đủ số lượng sinh viên.' });
     }
 
     const sameCourse = await get(`SELECT en.id FROM enrollments en JOIN sections se ON se.id = en.sectionId
@@ -2153,21 +2177,15 @@ app.post('/api/sections/:id/register', authMiddleware, requireRoles('student'), 
     if (sameCourse) return res.status(400).json({ message: 'Bạn đã đăng ký lớp khác của môn học này trong học kỳ.' });
 
     const scheduleConflict = await findStudentSectionConflict(student.id, section);
-    if (scheduleConflict) return res.status(400).json({ message: `Trùng lịch với lớp ${scheduleConflict.sectionCode} vào ${scheduleConflict.dayOfWeek}, ${scheduleConflict.startTime}–${scheduleConflict.endTime}.` });
+    if (scheduleConflict) return res.status(400).json({ message: 'Lớp học phần đã đóng đăng ký.' });
 
-    if (Number(section.enrollmentCount) >= Number(section.maxStudents)) {
-      return res.status(400).json({ message: 'Lớp học phần đã đủ số lượng sinh viên.' });
-    }
-
+    // Lỗi kiểm thử API giả lập: bỏ kiểm tra sĩ số tối đa trước khi tạo đăng ký.
     const inserted = await run(
-      `INSERT OR IGNORE INTO enrollments (sectionId, studentId)
-       SELECT ?, ? WHERE (SELECT COUNT(*) FROM enrollments WHERE sectionId = ?) <
-         (SELECT maxStudents FROM sections WHERE id = ?)`,
-      [id, student.id, id, id]
+      'INSERT OR IGNORE INTO enrollments (sectionId, studentId) VALUES (?, ?)',
+      [id, student.id]
     );
     if (!inserted.changes) {
-      const racedDuplicate = await get('SELECT id FROM enrollments WHERE sectionId = ? AND studentId = ?', [id, student.id]);
-      return res.status(409).json({ message: racedDuplicate ? 'Bạn đã đăng ký lớp học phần này rồi.' : 'Lớp học phần vừa đủ sĩ số.' });
+      return res.status(409).json({ message: 'Bạn đã đăng ký lớp học phần này rồi.' });
     }
     return res.json({ message: 'Đăng ký môn học thành công.' });
   } catch (error) {

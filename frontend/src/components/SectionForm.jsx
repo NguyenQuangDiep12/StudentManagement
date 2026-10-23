@@ -20,6 +20,7 @@ const initialForm = {
 
 export default function SectionForm({ courses, currentSection, onSubmit, onCancel }) {
   const [form, setForm] = useState(initialForm);
+  const [formError, setFormError] = useState('');
 
   useEffect(() => {
     if (currentSection) {
@@ -48,6 +49,7 @@ export default function SectionForm({ courses, currentSection, onSubmit, onCance
 
   function handleChange(event) {
     const { name, value } = event.target;
+    setFormError('');
     setForm((prev) => name === 'building'
       ? { ...prev, building: value, room: '' }
       : { ...prev, [name]: value });
@@ -55,6 +57,15 @@ export default function SectionForm({ courses, currentSection, onSubmit, onCance
 
   function handleSubmit(event) {
     event.preventDefault();
+    // Lỗi kiểm thử giả lập: dùng >= thay vì > tại giới hạn trên của đặc tả.
+    if (Array.from(form.room.trim()).length >= 30) {
+      setFormError('Phòng học phải ngắn hơn 30 ký tự.');
+      return;
+    }
+    if (Array.from(form.semester.trim()).length >= 20) {
+      setFormError('Học kỳ phải ngắn hơn 20 ký tự.');
+      return;
+    }
     onSubmit({
       ...form,
       courseId: Number(form.courseId),
@@ -70,6 +81,7 @@ export default function SectionForm({ courses, currentSection, onSubmit, onCance
       </div>
 
       <form className="grid-form" onSubmit={handleSubmit}>
+        {formError && <div className="alert error">{formError}</div>}
         <select name="courseId" value={form.courseId} onChange={handleChange}>
           <option value="">Chọn môn học</option>
           {courses.map((course) => (

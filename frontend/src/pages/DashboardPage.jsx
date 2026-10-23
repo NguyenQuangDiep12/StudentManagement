@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../api';
 import CourseForm from '../components/CourseForm';
 import LecturerForm from '../components/LecturerForm';
@@ -11,6 +11,7 @@ import SectionForm from '../components/SectionForm';
 import StudentForm from '../components/StudentForm';
 import WeeklyTimetable from '../components/WeeklyTimetable';
 import { useAuth } from '../context/AuthContext';
+import { getFakeTestNotification } from '../utils/fakeTestNotifications';
 
 const roleSections = {
   admin: [
@@ -66,6 +67,81 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
+function SearchToolbar({ value, onChange, placeholder, count, total, label, fields = [] }) {
+  const [draft, setDraft] = useState(value.query || '');
+  const [field, setField] = useState(value.field || 'all');
+  const hasFilter = Boolean(value.query.trim());
+
+  useEffect(() => {
+    setDraft(value.query || '');
+    setField(value.field || 'all');
+  }, [value.query, value.field]);
+
+  function applySearch(event) {
+    event.preventDefault();
+    onChange({ query: draft.trim(), field });
+  }
+
+  return (
+    <form className="toolbar search-toolbar" onSubmit={applySearch}>
+      <span className="search-help">Chọn tiêu chí, nhập từ khóa rồi bấm <strong>Lọc</strong>.</span>
+      <div className="search-fields" role="group" aria-label="Chọn tiêu chí tìm kiếm">
+        <button type="button" className={`search-field-button ${field === 'all' ? 'active' : ''}`} onClick={() => setField('all')}>Tất cả</button>
+        {fields.map((item, index) => (
+          <button key={item} type="button" className={`search-field-button ${field === String(index) ? 'active' : ''}`} onClick={() => setField(String(index))}>
+            {item}
+          </button>
+        ))}
+      </div>
+      <div className="search-actions">
+        <label className="search-input-wrap">
+          <span className="search-icon" aria-hidden="true">⌕</span>
+          <input type="search" aria-label={placeholder} placeholder={placeholder} value={draft} onChange={(event) => setDraft(event.target.value)} />
+        </label>
+        <button type="submit" className="btn btn-primary search-submit">Lọc</button>
+        {hasFilter && (
+          <button type="button" className="btn btn-light search-reset" onClick={() => { setDraft(''); setField('all'); onChange({ query: '', field: 'all' }); }}>
+            Xóa lọc
+          </button>
+        )}
+      </div>
+      <span className="search-result-count" aria-live="polite"><strong>{count}</strong>/{total} {label}</span>
+    </form>
+  );
+}
+
+function matchesSearch(values, query) {
+  const keywords = normalizeText(query.query).split(/\s+/).filter(Boolean);
+  if (!keywords.length) return true;
+  const selectedValues = query.field === 'all' ? values : [values[Number(query.field)]];
+  const haystack = normalizeText(selectedValues.filter(Boolean).join(' '));
+  return keywords.every((keyword) => haystack.includes(keyword));
+}
+
+function gradePoint(grade) {
+  const points = { A: 4, 'B+': 3.5, B: 3, 'C+': 2.5, C: 2, 'D+': 1.5, D: 1, F: 0 };
+  return points[grade?.letterGrade] ?? 0;
+}
+
+function gradeClassification(average) {
+  if (average >= 8.5) return 'Xuất sắc';
+  if (average >= 8) return 'Giỏi';
+  if (average >= 6.5) return 'Khá';
+  if (average >= 5) return 'Trung bình';
+  return 'Chưa đạt';
+}
+
+function compareSemestersDescending(left, right) {
+  const getParts = (value) => {
+    const semesterNumber = Number(String(value).match(/(?:HK|Học kỳ)\s*([123])/i)?.[1] || 0);
+    const academicYear = Number(String(value).match(/20\d{2}/)?.[0] || 0);
+    return { academicYear, semesterNumber, value: String(value) };
+  };
+  const a = getParts(left);
+  const b = getParts(right);
+  return b.academicYear - a.academicYear || b.semesterNumber - a.semesterNumber || a.value.localeCompare(b.value, 'vi');
+}
+
 function formatDateTime(value) {
   if (!value) return '--';
   const date = new Date(value);
@@ -112,20 +188,21 @@ export default function DashboardPage() {
   const [editingCourse, setEditingCourse] = useState(null);
   const [editingGrade, setEditingGrade] = useState(null);
   const [gradePrefill, setGradePrefill] = useState(null);
+  const [gradeDetails, setGradeDetails] = useState(null);
   const [editingSchedule, setEditingSchedule] = useState(null);
   const [editingSection, setEditingSection] = useState(null);
   const [sectionRoster, setSectionRoster] = useState(null);
   const [rosterLoading, setRosterLoading] = useState(false);
   const [editingFeedback, setEditingFeedback] = useState(null);
   const [editingNews, setEditingNews] = useState(null);
-  const [studentSearch, setStudentSearch] = useState('');
-  const [lecturerSearch, setLecturerSearch] = useState('');
-  const [courseSearch, setCourseSearch] = useState('');
-  const [gradeSearch, setGradeSearch] = useState('');
-  const [scheduleSearch, setScheduleSearch] = useState('');
-  const [sectionSearch, setSectionSearch] = useState('');
-  const [feedbackSearch, setFeedbackSearch] = useState('');
-  const [newsSearch, setNewsSearch] = useState('');
+  const [studentSearch, setStudentSearch] = useState({ query: '', field: 'all' });
+  const [lecturerSearch, setLecturerSearch] = useState({ query: '', field: 'all' });
+  const [courseSearch, setCourseSearch] = useState({ query: '', field: 'all' });
+  const [gradeSearch, setGradeSearch] = useState({ query: '', field: 'all' });
+  const [scheduleSearch, setScheduleSearch] = useState({ query: '', field: 'all' });
+  const [sectionSearch, setSectionSearch] = useState({ query: '', field: 'all' });
+  const [feedbackSearch, setFeedbackSearch] = useState({ query: '', field: 'all' });
+  const [newsSearch, setNewsSearch] = useState({ query: '', field: 'all' });
   const [newsCategoryFilter, setNewsCategoryFilter] = useState('all');
   const [newsStatusFilter, setNewsStatusFilter] = useState('all');
   const [newsImportantOnly, setNewsImportantOnly] = useState(false);
@@ -217,69 +294,67 @@ export default function DashboardPage() {
   const sections = roleSections[user?.role] || [];
 
   const filteredStudents = useMemo(() => {
-    const keyword = studentSearch.trim().toLowerCase();
-    if (!keyword) return students;
-
-    return students.filter((student) =>
-      [student.studentCode, student.fullName, student.email, student.className, student.major]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(keyword))
-    );
+    return students.filter((student) => matchesSearch(
+      [student.studentCode, student.fullName, student.email, student.className, student.major], studentSearch
+    ));
   }, [studentSearch, students]);
 
   const filteredLecturers = useMemo(() => {
-    const keyword = lecturerSearch.trim().toLowerCase();
-    if (!keyword) return lecturers;
-
-    return lecturers.filter((lecturer) =>
-      [lecturer.lecturerCode, lecturer.fullName, lecturer.email, lecturer.username, lecturer.department, lecturer.degree]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(keyword))
-    );
+    return lecturers.filter((lecturer) => matchesSearch(
+      [lecturer.lecturerCode, lecturer.fullName, lecturer.email, lecturer.username, lecturer.department, lecturer.degree], lecturerSearch
+    ));
   }, [lecturerSearch, lecturers]);
 
   const filteredCourses = useMemo(() => {
-    const keyword = courseSearch.trim().toLowerCase();
-    if (!keyword) return courses;
-
-    return courses.filter((course) =>
-      [course.courseCode, course.courseName, course.lecturerName]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(keyword))
-    );
+    return courses.filter((course) => matchesSearch(
+      [course.courseCode, course.courseName, course.lecturerName], courseSearch
+    ));
   }, [courseSearch, courses]);
 
   const filteredGrades = useMemo(() => {
-    const keyword = gradeSearch.trim().toLowerCase();
-    if (!keyword) return grades;
-
-    return grades.filter((grade) =>
-      [grade.studentCode, grade.fullName, grade.courseCode, grade.courseName, grade.semester]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(keyword))
-    );
+    return grades.filter((grade) => matchesSearch(
+      [grade.studentCode, grade.fullName, grade.courseCode, grade.courseName, grade.semester], gradeSearch
+    ));
   }, [gradeSearch, grades]);
 
-  const filteredSchedules = useMemo(() => {
-    const keyword = scheduleSearch.trim().toLowerCase();
-    if (!keyword) return schedules;
+  const semesterGradeGroups = useMemo(() => {
+    const rows = isStudent ? grades : filteredGrades;
+    const groups = new Map();
+    rows.forEach((grade) => {
+      const semester = grade.semester || 'Chưa xác định học kỳ';
+      if (!groups.has(semester)) groups.set(semester, []);
+      groups.get(semester).push(grade);
+    });
+    return [...groups.entries()].sort(([left], [right]) => compareSemestersDescending(left, right)).map(([semester, semesterGrades]) => {
+      const totalCredits = semesterGrades.reduce((sum, grade) => sum + Number(grade.credits || 0), 0);
+      const weight = totalCredits || semesterGrades.length;
+      const average10 = semesterGrades.reduce((sum, grade) => sum + Number(grade.total || 0) * (Number(grade.credits) || 1), 0) / weight;
+      const average4 = semesterGrades.reduce((sum, grade) => sum + gradePoint(grade) * (Number(grade.credits) || 1), 0) / weight;
+      const earnedCreditsInSemester = semesterGrades
+        .filter((grade) => Number(grade.total || 0) >= 4)
+        .reduce((sum, grade) => sum + Number(grade.credits || 0), 0);
+      return {
+        semester,
+        grades: semesterGrades,
+        average10: Math.round(average10 * 100) / 100,
+        average4: Math.round(average4 * 100) / 100,
+        totalCredits,
+        earnedCredits: earnedCreditsInSemester,
+        classification: gradeClassification(average10)
+      };
+    });
+  }, [filteredGrades, grades, isStudent]);
 
-    return schedules.filter((schedule) =>
-      [schedule.className, schedule.courseCode, schedule.courseName, schedule.room, schedule.semester, schedule.dayOfWeek]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(keyword))
-    );
+  const filteredSchedules = useMemo(() => {
+    return schedules.filter((schedule) => matchesSearch(
+      [schedule.className, schedule.courseCode, schedule.courseName, schedule.room, schedule.semester, schedule.dayOfWeek], scheduleSearch
+    ));
   }, [scheduleSearch, schedules]);
 
   const filteredSections = useMemo(() => {
-    const keyword = sectionSearch.trim().toLowerCase();
-    if (!keyword) return sectionsList;
-
-    return sectionsList.filter((section) =>
-      [section.sectionCode, section.courseCode, section.courseName, section.semester, section.building, section.room, section.dayOfWeek, section.lecturerName]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(keyword))
-    );
+    return sectionsList.filter((section) => matchesSearch(
+      [section.sectionCode, section.courseCode, section.courseName, section.semester, section.building, section.room, section.dayOfWeek, section.lecturerName], sectionSearch
+    ));
   }, [sectionSearch, sectionsList]);
 
 
@@ -290,7 +365,7 @@ export default function DashboardPage() {
 
   const filteredNews = useMemo(() => {
     // Tìm không phân biệt hoa thường, không cần gõ dấu, nhiều từ khóa phải cùng khớp
-    const keywords = normalizeText(newsSearch).split(/\s+/).filter(Boolean);
+    const keywords = normalizeText(newsSearch.query).split(/\s+/).filter(Boolean);
 
     return newsList.filter((news) => {
       if (newsCategoryFilter !== 'all' && (news.category || 'Thông báo') !== newsCategoryFilter) return false;
@@ -298,33 +373,26 @@ export default function DashboardPage() {
       if (newsImportantOnly && Number(news.isImportant) !== 1) return false;
       if (keywords.length === 0) return true;
 
-      const haystack = normalizeText(
-        [news.title, news.summary, news.content, news.category, news.createdByName, formatDateTime(news.createdAt)]
-          .filter(Boolean)
-          .join(' ')
-      );
+      const newsValues = [news.title, news.summary, news.content, news.category, news.createdByName, formatDateTime(news.createdAt)];
+      const selectedValues = newsSearch.field === 'all' ? newsValues : [newsValues[Number(newsSearch.field)]];
+      const haystack = normalizeText(selectedValues.filter(Boolean).join(' '));
       return keywords.every((word) => haystack.includes(word));
     });
   }, [newsSearch, newsCategoryFilter, newsStatusFilter, newsImportantOnly, newsList]);
 
-  const hasNewsFilter = Boolean(newsSearch.trim()) || newsCategoryFilter !== 'all' || newsStatusFilter !== 'all' || newsImportantOnly;
+  const hasNewsFilter = Boolean(newsSearch.query.trim()) || newsCategoryFilter !== 'all' || newsStatusFilter !== 'all' || newsImportantOnly;
 
   function resetNewsFilters() {
-    setNewsSearch('');
+    setNewsSearch({ query: '', field: 'all' });
     setNewsCategoryFilter('all');
     setNewsStatusFilter('all');
     setNewsImportantOnly(false);
   }
 
   const filteredFeedbacks = useMemo(() => {
-    const keyword = feedbackSearch.trim().toLowerCase();
-    if (!keyword) return feedbacks;
-
-    return feedbacks.filter((feedback) =>
-      [feedback.subject, feedback.message, feedback.adminReply, feedback.fullName, feedback.studentCode, feedback.className]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(keyword))
-    );
+    return feedbacks.filter((feedback) => matchesSearch(
+      [feedback.subject, feedback.message, feedback.adminReply, feedback.fullName, feedback.studentCode, feedback.className], feedbackSearch
+    ));
   }, [feedbackSearch, feedbacks]);
 
   const averageGrade = useMemo(() => {
@@ -511,7 +579,7 @@ export default function DashboardPage() {
       await loadData();
       setActiveSection(isLecturer ? 'sections' : 'courses');
     } catch (err) {
-      setError(err.message);
+      setError(getFakeTestNotification(editingCourse ? 'courseUpdate' : 'courseCreate', err.message));
     }
   }
 
@@ -552,7 +620,7 @@ export default function DashboardPage() {
       setGradePrefill(null);
       await loadData();
     } catch (err) {
-      setError(err.message);
+      setError(getFakeTestNotification(editingGrade ? 'gradeUpdate' : 'gradeCreate', err.message));
     }
   }
 
@@ -638,7 +706,7 @@ export default function DashboardPage() {
         setActiveSection('weeklySchedule');
       }
     } catch (err) {
-      setError(err.message);
+      setError(getFakeTestNotification(editingSection ? 'sectionUpdate' : 'sectionCreate', err.message));
     }
   }
 
@@ -692,7 +760,7 @@ export default function DashboardPage() {
       await loadData();
       setActiveSection('weeklySchedule');
     } catch (err) {
-      setError(err.message);
+      setError(getFakeTestNotification('registration', err.message));
     }
   }
 
@@ -702,7 +770,7 @@ export default function DashboardPage() {
       setMessage(data.message);
       await loadData();
     } catch (err) {
-      setError(err.message);
+      setError(getFakeTestNotification('unregistration', err.message));
     }
   }
 
@@ -1146,13 +1214,7 @@ export default function DashboardPage() {
             <p>Tìm kiếm nhanh theo mã sinh viên, họ tên, lớp hoặc ngành.</p>
           </div>
 
-          <div className="toolbar">
-            <input
-              placeholder="Tìm kiếm sinh viên..."
-              value={studentSearch}
-              onChange={(event) => setStudentSearch(event.target.value)}
-            />
-          </div>
+          <SearchToolbar value={studentSearch} onChange={setStudentSearch} placeholder="Nhập từ khóa sinh viên..." fields={['Mã SV', 'Họ tên', 'Email', 'Lớp', 'Ngành']} count={filteredStudents.length} total={students.length} label="sinh viên" />
 
           <div className="table-wrapper">
             <table>
@@ -1216,13 +1278,7 @@ export default function DashboardPage() {
             <p>Admin có thể thêm, sửa, xóa giảng viên và cấp mã giảng viên riêng cho từng người.</p>
           </div>
 
-          <div className="toolbar">
-            <input
-              placeholder="Tìm kiếm giảng viên..."
-              value={lecturerSearch}
-              onChange={(event) => setLecturerSearch(event.target.value)}
-            />
-          </div>
+          <SearchToolbar value={lecturerSearch} onChange={setLecturerSearch} placeholder="Nhập từ khóa giảng viên..." fields={['Mã GV', 'Họ tên', 'Email', 'Tài khoản', 'Khoa', 'Học vị']} count={filteredLecturers.length} total={lecturers.length} label="giảng viên" />
 
           <div className="table-wrapper">
             <table>
@@ -1288,13 +1344,7 @@ export default function DashboardPage() {
             <p>Tạo môn học trước, sau đó mở lớp học phần để sinh viên đăng ký.</p>
           </div>
 
-          <div className="toolbar">
-            <input
-              placeholder="Tìm kiếm môn học..."
-              value={courseSearch}
-              onChange={(event) => setCourseSearch(event.target.value)}
-            />
-          </div>
+          <SearchToolbar value={courseSearch} onChange={setCourseSearch} placeholder="Nhập từ khóa môn học..." fields={['Mã môn', 'Tên môn', 'Giảng viên']} count={filteredCourses.length} total={courses.length} label="môn học" />
 
           <div className="table-wrapper">
             <table>
@@ -1386,64 +1436,78 @@ export default function DashboardPage() {
             </div>
 
             {!isStudent && (
-              <div className="toolbar">
-                <input
-                  placeholder="Tìm kiếm bảng điểm..."
-                  value={gradeSearch}
-                  onChange={(event) => setGradeSearch(event.target.value)}
-                />
-              </div>
+              <SearchToolbar value={gradeSearch} onChange={setGradeSearch} placeholder="Nhập từ khóa bảng điểm..." fields={['Mã SV', 'Sinh viên', 'Mã môn', 'Môn học', 'Học kỳ']} count={filteredGrades.length} total={grades.length} label="kết quả" />
             )}
 
             <div className="table-wrapper">
               <table>
                 <thead>
                   <tr>
+                    <th>STT</th>
                     {!isStudent && <th>Sinh viên</th>}
-                    <th>Môn học</th>
-                    <th>Học kỳ</th>
-                    <th>Giữa kỳ</th>
-                    <th>Cuối kỳ</th>
-                    <th>Tổng kết</th>
-                    <th>Điểm chữ</th>
+                    <th>Mã MH</th>
+                    <th>Nhóm/tổ môn học</th>
+                    <th>Tên môn học</th>
+                    <th>Số tín chỉ</th>
+                    <th>Điểm thi</th>
+                    <th>Điểm TK (10)</th>
+                    <th>Điểm TK (4)</th>
+                    <th>Điểm TK (C)</th>
+                    <th>Kết quả</th>
                     {!isStudent && <th>Thao tác</th>}
+                    {isStudent && <th>Chi tiết</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {(isStudent ? grades : filteredGrades).map((grade) => (
-                    <tr key={grade.id}>
-                      {!isStudent && (
-                        <td>
-                          <div>{grade.studentCode}</div>
-                          <small>{grade.fullName}</small>
-                        </td>
+                  {semesterGradeGroups.map((group) => (
+                    <Fragment key={group.semester}>
+                      <tr className="semester-heading-row">
+                        <th colSpan={isStudent ? 11 : 12} scope="rowgroup">{group.semester}</th>
+                      </tr>
+                      {group.grades.map((grade, index) => (
+                        <tr key={grade.id}>
+                          <td>{index + 1}</td>
+                          {!isStudent && (
+                            <td>
+                              <div>{grade.studentCode}</div>
+                              <small>{grade.fullName}</small>
+                            </td>
+                          )}
+                          <td>{grade.courseCode}</td>
+                          <td>{grade.sectionCode || '--'}</td>
+                          <td>{grade.courseName}</td>
+                          <td>{grade.credits || '--'}</td>
+                          <td>{grade.final ?? '--'}</td>
+                          <td>{Number(grade.total || 0).toFixed(1)}</td>
+                          <td>{gradePoint(grade).toFixed(1)}</td>
+                          <td><span className="pill success">{grade.letterGrade || '--'}</span></td>
+                          <td><span className={`grade-result ${Number(grade.total || 0) >= 4 ? 'passed' : 'failed'}`}>{Number(grade.total || 0) >= 4 ? 'Đạt' : 'Chưa đạt'}</span></td>
+                          {!isStudent ? (
+                            <td>
+                              <div className="action-buttons">
+                                <button className="btn btn-warning" onClick={() => setEditingGrade(grade)}>Sửa</button>
+                                <button className="btn btn-danger" onClick={() => handleDeleteGrade(grade.id)}>Xóa</button>
+                              </div>
+                            </td>
+                          ) : (
+                            <td><button className="grade-detail-button" aria-label={`Xem chi tiết ${grade.courseName}`} onClick={() => setGradeDetails(grade)}>☷</button></td>
+                          )}
+                        </tr>
+                      ))}
+                      {isStudent && (
+                        <tr className="semester-summary-row">
+                          <td colSpan="5">Tổng kết học kỳ</td>
+                          <td colSpan="2">Tín chỉ: {group.earnedCredits}/{group.totalCredits}</td>
+                          <td>TB (10): {group.average10.toFixed(2)}</td>
+                          <td>TB (4): {group.average4.toFixed(2)}</td>
+                          <td colSpan="2">Xếp loại: {group.classification}</td>
+                        </tr>
                       )}
-                      <td>
-                        <div>{grade.courseName}</div>
-                        <small>{grade.courseCode}</small>
-                      </td>
-                      <td>{grade.semester}</td>
-                      <td>{grade.midterm}</td>
-                      <td>{grade.final}</td>
-                      <td>{grade.total}</td>
-                      <td><span className="pill success">{grade.letterGrade}</span></td>
-                      {!isStudent && (
-                        <td>
-                          <div className="action-buttons">
-                            <button className="btn btn-warning" onClick={() => setEditingGrade(grade)}>
-                              Sửa
-                            </button>
-                            <button className="btn btn-danger" onClick={() => handleDeleteGrade(grade.id)}>
-                              Xóa
-                            </button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
+                    </Fragment>
                   ))}
-                  {(isStudent ? grades : filteredGrades).length === 0 && (
+                  {semesterGradeGroups.length === 0 && (
                     <tr>
-                      <td colSpan={isStudent ? 6 : 8} className="empty-cell">Chưa có dữ liệu điểm số.</td>
+                      <td colSpan={isStudent ? 11 : 12} className="empty-cell">Chưa có dữ liệu điểm số.</td>
                     </tr>
                   )}
                 </tbody>
@@ -1451,6 +1515,31 @@ export default function DashboardPage() {
             </div>
           </div>
         </section>
+        {gradeDetails && (
+          <div className="grade-detail-backdrop" role="presentation" onClick={() => setGradeDetails(null)}>
+            <section className="grade-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="grade-detail-title" onClick={(event) => event.stopPropagation()}>
+              <div className="grade-detail-heading">
+                <div>
+                  <p>CHI TIẾT ĐIỂM · {gradeDetails.semester}</p>
+                  <h3 id="grade-detail-title">{gradeDetails.courseName}</h3>
+                </div>
+                <button className="grade-detail-close" onClick={() => setGradeDetails(null)} aria-label="Đóng">×</button>
+              </div>
+              <div className="table-wrapper">
+                <table className="grade-detail-table">
+                  <thead><tr><th>STT</th><th>Thành phần</th><th>Trọng số</th><th>Điểm</th></tr></thead>
+                  <tbody>
+                    <tr><td>1</td><td>Giữa kỳ</td><td>40%</td><td>{gradeDetails.midterm ?? '--'}</td></tr>
+                    <tr><td>2</td><td>Cuối kỳ</td><td>60%</td><td>{gradeDetails.final ?? '--'}</td></tr>
+                    <tr className="grade-detail-total"><td colSpan="2">Điểm tổng kết</td><td>100%</td><td>{Number(gradeDetails.total || 0).toFixed(1)}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              {gradeDetails.notes && <p className="grade-detail-note"><strong>Ghi chú:</strong> {gradeDetails.notes}</p>}
+              <div className="grade-detail-footer"><button className="btn btn-light" onClick={() => setGradeDetails(null)}>Đóng</button></div>
+            </section>
+          </div>
+        )}
       </>
     );
   }
@@ -1595,13 +1684,7 @@ export default function DashboardPage() {
           </div>
 
           {!isStudent && (
-            <div className="toolbar">
-              <input
-                placeholder="Tìm kiếm lịch học..."
-                value={scheduleSearch}
-                onChange={(event) => setScheduleSearch(event.target.value)}
-              />
-            </div>
+            <SearchToolbar value={scheduleSearch} onChange={setScheduleSearch} placeholder="Nhập từ khóa lịch học..." fields={['Lớp', 'Mã môn', 'Môn học', 'Phòng', 'Học kỳ', 'Thứ']} count={filteredSchedules.length} total={schedules.length} label="lịch học" />
           )}
 
           <div className="table-wrapper">
@@ -1676,13 +1759,7 @@ export default function DashboardPage() {
             <p>Theo dõi chỗ còn trống, lịch học và trạng thái đăng ký của từng lớp.</p>
           </div>
 
-          <div className="toolbar">
-            <input
-              placeholder="Tìm kiếm lớp học phần..."
-              value={sectionSearch}
-              onChange={(event) => setSectionSearch(event.target.value)}
-            />
-          </div>
+          <SearchToolbar value={sectionSearch} onChange={setSectionSearch} placeholder="Nhập từ khóa lớp học phần..." fields={['Mã lớp', 'Mã môn', 'Môn học', 'Học kỳ', 'Tòa nhà', 'Phòng', 'Thứ', 'Giảng viên']} count={filteredSections.length} total={sectionsList.length} label="lớp học phần" />
 
           <div className="table-wrapper">
             <table>
@@ -1787,13 +1864,7 @@ export default function DashboardPage() {
           <p>Chỉ đăng ký được lớp còn chỗ và không trùng lịch với lớp bạn đã chọn. Lịch được cập nhật sau khi đăng ký.</p>
         </div>
 
-        <div className="toolbar">
-          <input
-            placeholder="Tìm kiếm lớp học phần hoặc môn học..."
-            value={sectionSearch}
-            onChange={(event) => setSectionSearch(event.target.value)}
-          />
-        </div>
+        <SearchToolbar value={sectionSearch} onChange={setSectionSearch} placeholder="Nhập từ khóa lớp học phần..." fields={['Mã lớp', 'Mã môn', 'Môn học', 'Học kỳ', 'Tòa nhà', 'Phòng', 'Thứ', 'Giảng viên']} count={filteredSections.length} total={sectionsList.length} label="lớp học phần" />
 
         <div className="table-wrapper">
           <table>
@@ -1812,7 +1883,6 @@ export default function DashboardPage() {
             <tbody>
               {filteredSections.map((section) => {
                 const isRegisteredSection = Number(section.isRegistered) === 1;
-                const isFull = Number(section.enrollmentCount) >= Number(section.maxStudents);
                 const isClosed = section.status !== 'open';
                 const registrationStatus = isClosed ? 'Đóng đăng ký' : 'Đang mở';
                 const conflict = !isRegisteredSection && hasScheduleConflict(section, sectionsList.filter((item) => Number(item.isRegistered) === 1));
@@ -1845,10 +1915,10 @@ export default function DashboardPage() {
                       ) : (
                         <button
                           className="btn btn-primary"
-                          disabled={isClosed || isFull || conflict}
+                          disabled={isClosed || conflict}
                           onClick={() => handleRegisterSection(section.id)}
                         >
-                          {isFull ? 'Đã đầy' : conflict ? 'Trùng lịch' : isClosed ? 'Đã đóng' : 'Đăng ký'}
+                          {conflict ? 'Trùng lịch' : isClosed ? 'Đã đóng' : 'Đăng ký'}
                         </button>
                       )}
                     </td>
@@ -1945,6 +2015,7 @@ export default function DashboardPage() {
           </div>
 
 
+          <SearchToolbar value={feedbackSearch} onChange={setFeedbackSearch} placeholder="Nhập từ khóa ý kiến..." fields={['Tiêu đề', 'Nội dung', 'Phản hồi', 'Sinh viên', 'Mã SV', 'Lớp']} count={filteredFeedbacks.length} total={feedbacks.length} label="ý kiến" />
           <div className="table-wrapper">
             <table>
               <thead>
@@ -2026,13 +2097,9 @@ export default function DashboardPage() {
 
   function renderNewsToolbar(showStatus) {
     return (
-      <div className="toolbar news-toolbar">
-        <input
-          type="search"
-          placeholder="Tìm theo tiêu đề, nội dung, phân loại, người đăng... (không cần gõ dấu)"
-          value={newsSearch}
-          onChange={(event) => setNewsSearch(event.target.value)}
-        />
+      <>
+        <SearchToolbar value={newsSearch} onChange={setNewsSearch} placeholder="Nhập từ khóa tin tức..." fields={['Tiêu đề', 'Tóm tắt', 'Nội dung', 'Phân loại', 'Người đăng', 'Ngày đăng']} count={filteredNews.length} total={newsList.length} label="tin" />
+        <div className="toolbar news-toolbar">
         <select value={newsCategoryFilter} onChange={(event) => setNewsCategoryFilter(event.target.value)}>
           <option value="all">Tất cả phân loại</option>
           {newsCategories.map((category) => (
@@ -2057,10 +2124,8 @@ export default function DashboardPage() {
         {hasNewsFilter && (
           <button type="button" className="btn btn-light" onClick={resetNewsFilters}>Xóa bộ lọc</button>
         )}
-        <small className="news-result-count">
-          {filteredNews.length}/{newsList.length} tin
-        </small>
-      </div>
+        </div>
+      </>
     );
   }
 

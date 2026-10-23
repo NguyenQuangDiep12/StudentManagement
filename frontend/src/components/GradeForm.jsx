@@ -66,7 +66,7 @@ export default function GradeForm({ students, courses, currentGrade, initialValu
       </div>
 
       <form className="grid-form" onSubmit={handleSubmit}>
-        <select name="studentId" value={form.studentId} onChange={handleChange} required disabled={Boolean(initialValues && !currentGrade)}>
+        <select name="studentId" value={form.studentId} onChange={handleChange} disabled={Boolean(initialValues && !currentGrade)}>
           <option value="">Chọn sinh viên</option>
           {students.map((student) => (
             <option key={student.id} value={student.id}>
@@ -75,7 +75,7 @@ export default function GradeForm({ students, courses, currentGrade, initialValu
           ))}
         </select>
 
-        <select name="courseId" value={form.courseId} onChange={handleChange} required disabled={Boolean(initialValues && !currentGrade)}>
+        <select name="courseId" value={form.courseId} onChange={handleChange} disabled={Boolean(initialValues && !currentGrade)}>
           <option value="">Chọn môn học</option>
           {courses.map((course) => (
             <option key={course.id} value={course.id}>
@@ -89,31 +89,24 @@ export default function GradeForm({ students, courses, currentGrade, initialValu
           placeholder="Ví dụ: HK1 2026"
           value={form.semester}
           onChange={handleChange}
-          required
         />
 
         <input
           type="number"
           name="midterm"
-          min="0"
-          max="10"
           step="0.1"
           placeholder="Điểm giữa kỳ"
           value={form.midterm}
           onChange={handleChange}
-          required
         />
 
         <input
           type="number"
           name="final"
-          min="0"
-          max="10"
           step="0.1"
           placeholder="Điểm cuối kỳ"
           value={form.final}
           onChange={handleChange}
-          required
         />
 
         <input

@@ -47,25 +47,20 @@ export default function CourseForm({ currentCourse, onSubmit, onCancel, defaultL
       <form className="grid-form" onSubmit={handleSubmit}>
         <input
           name="courseCode"
-          required
-          minLength={2}
-          maxLength={20}
-          pattern="[A-Za-z0-9-]{2,20}"
           title="Mã môn học phải có 2–20 ký tự, chỉ gồm chữ cái, số hoặc dấu gạch ngang."
           placeholder="Mã môn học, ví dụ INT301"
           value={form.courseCode}
           onChange={handleChange}
+          required
         />
 
         <input
           name="courseName"
-          required
-          minLength={12}
-          maxLength={50}
           title="Tên môn học phải có từ 12 đến 50 ký tự."
           placeholder="Tên môn học"
           value={form.courseName}
           onChange={handleChange}
+          required
         />
 
         <input
