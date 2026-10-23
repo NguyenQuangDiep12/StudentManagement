@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -123,7 +124,7 @@ export default function NavBar() {
           Đăng xuất
         </button>
       </div>
-      {showPasswordForm && (
+      {showPasswordForm && createPortal(
         <div className="password-dialog-backdrop" role="presentation" onClick={() => setShowPasswordForm(false)}>
           <section className="password-dialog card" role="dialog" aria-modal="true" aria-labelledby="change-password-title" onClick={(event) => event.stopPropagation()}>
             <h2 id="change-password-title">Đổi mật khẩu</h2>
@@ -139,7 +140,8 @@ export default function NavBar() {
               </div>
             </form>
           </section>
-        </div>
+        </div>,
+        document.body
       )}
     </header>
   );
